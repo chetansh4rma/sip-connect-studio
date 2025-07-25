@@ -116,15 +116,16 @@ app.post('/api/twilio/webhook', (req, res) => {
   });
   
   // Generate TwiML response to forward call to LiveKit SIP trunk
-  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+ const twiml =
+`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Dial>
-        <Sip>sip:${config.LIVEKIT_SIP_TRUNK_NUMBER}@${config.LIVEKIT_SIP_DOMAIN}?X-LK-CallerId=${encodeURIComponent(From)}&X-LK-RoomName=${encodeURIComponent(roomId)}</Sip>
-    </Dial>
+  <Dial>
+    <Sip>sip:${config.LIVEKIT_SIP_TRUNK_NUMBER}@${config.LIVEKIT_SIP_DOMAIN}?X‑LK‑CallerId=${encodeURIComponent(From)}&amp;X‑LK‑RoomName=${encodeURIComponent(roomId)}</Sip>
+  </Dial>
 </Response>`;
+res.set('Content-Type', 'text/xml');
+res.send(twiml);
 
-  res.set('Content-Type', 'text/xml');
-  res.send(twiml);
 });
 
 // Call status tracking
