@@ -104,7 +104,7 @@ import { twiml as Twiml } from 'twilio';
 app.post('/api/twilio/webhook', (req, res) => {
   const { From, To, CallSid } = req.body;
   const timestamp = Date.now();
-  const roomId = `call-${timestamp}`;
+    const roomId = 'support-room';
  console.log(`📞 Incoming call → assigned to room: ${roomId}`, {
     from: From,
     to: To,
