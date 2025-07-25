@@ -102,11 +102,14 @@ app.post('/api/sip/setup', async (req, res) => {
 // TwiML webhook for incoming calls
 app.post('/api/twilio/webhook', (req, res) => {
   const { From, To, CallSid } = req.body;
-  
-  // Create room ID based on timestamp for better uniqueness
+
+  // 🧠 Option 1: predictable static room
+  // const roomId = 'support-room';
+
+  // 🧠 Option 2: unique room per call (original logic)
   const timestamp = Date.now();
   const roomId = `call-${timestamp}`;
-  
+
   console.log(`📞 Incoming call from ${From} → assigned to room: ${roomId}`, {
     from: From,
     to: To,
@@ -114,19 +117,23 @@ app.post('/api/twilio/webhook', (req, res) => {
     roomId,
     timestamp: new Date().toISOString()
   });
-  
-  // Generate TwiML response to forward call to LiveKit SIP trunk
- const twiml =
-`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Dial>
-    <Sip>sip:${config.LIVEKIT_SIP_TRUNK_NUMBER}@${config.LIVEKIT_SIP_DOMAIN}?X‑LK‑CallerId=${encodeURIComponent(From)}&amp;X‑LK‑RoomName=${encodeURIComponent(roomId)}</Sip>
-  </Dial>
-</Response>`;
-res.set('Content-Type', 'text/xml');
-res.send(twiml);
 
+  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">Please wait while we connect your call.</Say>
+  <Pause length="3"/>
+  <Dial timeout="20">
+    <Sip>
+      sip:${config.LIVEKIT_SIP_TRUNK_NUMBER}@${config.LIVEKIT_SIP_DOMAIN}?X-LK-CallerId=${encodeURIComponent(From)}&X-LK-RoomName=${encodeURIComponent(roomId)}
+    </Sip>
+  </Dial>
+  <Say voice="alice">Sorry, we could not connect your call. Please try again later.</Say>
+</Response>`;
+
+  res.set('Content-Type', 'text/xml');
+  res.send(twiml);
 });
+
 
 // Call status tracking
 app.post('/api/call/status', (req, res) => {
