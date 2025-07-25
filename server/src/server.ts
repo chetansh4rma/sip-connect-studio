@@ -101,7 +101,6 @@ app.post('/api/sip/setup', async (req, res) => {
 
 import { twiml as Twiml } from 'twilio';
 
-import { twiml as Twiml } from 'twilio';
 
 app.post('/api/twilio/webhook', (req, res) => {
   try {
