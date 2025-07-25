@@ -17,6 +17,10 @@
   "include": [
     "src/**/*"
   ],
+  "scripts": {
+  "build": "tsc"
+}
+,
   "exclude": [
     "node_modules",
     "dist",
