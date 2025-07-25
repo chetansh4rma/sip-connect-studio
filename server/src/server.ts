@@ -4,10 +4,10 @@ import dotenv from 'dotenv';
 import { AccessToken } from 'livekit-server-sdk';
 import { setupSipTrunk, createDispatchRule } from './livekit-setup';
 import { validateEnv } from './config';
-
 dotenv.config();
 
 const app = express();
+app.use(express.urlencoded({ extended: false }));
 const PORT = process.env.PORT || 3001;
 
 // Middleware
