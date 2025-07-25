@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <!-- Forward incoming PSTN call to LiveKit SIP trunk -->
+    <Dial>
+        <Sip>sip:{{LIVEKIT_SIP_TRUNK_NUMBER}}@{{LIVEKIT_SIP_DOMAIN}}?X-LK-CallerId={{From}}&X-LK-RoomName={{CallSid}}</Sip>
+    </Dial>
+    
+    <!-- Fallback if SIP dial fails -->
+    <Say voice="alice">
+        Sorry, we are unable to connect your call at this time. Please try again later.
+    </Say>
+</Response>

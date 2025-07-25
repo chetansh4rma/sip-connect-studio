@@ -1,0 +1,36 @@
+{
+  "dispatchRules": [
+    {
+      "sipDispatchRuleId": "pstn-to-room-rule",
+      "name": "PSTN Call Router",
+      "metadata": "Routes incoming PSTN calls to LiveKit rooms based on caller ID",
+      "trunkIds": ["twilio-pstn-trunk"],
+      "roomName": "call-${caller_id}-${timestamp}",
+      "roomPreset": "video_call",
+      "hidePhoneNumber": false,
+      "participantIdentity": "pstn-caller-${caller_id}",
+      "participantName": "Caller ${caller_id}",
+      "participantMetadata": {
+        "source": "pstn",
+        "callType": "incoming",
+        "timestamp": "${timestamp}"
+      }
+    }
+  ],
+  "sipTrunks": [
+    {
+      "sipTrunkId": "twilio-pstn-trunk",
+      "name": "Twilio PSTN Trunk",
+      "metadata": "SIP trunk for receiving PSTN calls from Twilio",
+      "inboundAddresses": [
+        "54.172.60.0/30",
+        "54.244.51.0/30", 
+        "177.71.206.192/30",
+        "54.171.127.192/30"
+      ],
+      "transport": "udp",
+      "authUsername": "${LIVEKIT_SIP_TRUNK_NUMBER}",
+      "authPassword": "auto_generated_secure_password"
+    }
+  ]
+}
