@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Room, ConnectionState, RemoteParticipant, RemoteTrack, Track, RoomEvent } from 'livekit-client';
+import { Room, ConnectionState, RemoteParticipant, RemoteTrack, Track, RoomEvent, LocalAudioTrack, RemoteAudioTrack } from 'livekit-client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Mic, MicOff, Phone, PhoneOff, Volume2, VolumeX } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { useSilenceDetection } from '@/hooks/useSilenceDetection';
 
 interface CallInterfaceProps {
   roomName?: string;
@@ -22,12 +23,25 @@ export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [connectedParticipants, setConnectedParticipants] = useState<string[]>([]);
   const [callDuration, setCallDuration] = useState(0);
-  const [lastSpeechTime, setLastSpeechTime] = useState<number>(Date.now());
   
   const { toast } = useToast();
   const audioElementRef = useRef<HTMLAudioElement>(null);
   const callStartTimeRef = useRef<number | null>(null);
-  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Silence detection with audio level monitoring
+  const silenceDetection = useSilenceDetection({
+    silenceThreshold: 10000, // 10 seconds
+    audioLevelThreshold: 0.05, // Adjust based on sensitivity needed
+    debounceDelay: 500, // 500ms debounce to handle brief gaps
+    onSilenceDetected: () => {
+      toast({
+        title: "Call ended due to silence",
+        description: "No speech detected for 10 seconds",
+        variant: "destructive"
+      });
+      handleEndCall();
+    }
+  });
 
   // Call duration timer
   useEffect(() => {
@@ -44,31 +58,18 @@ export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
     };
   }, [callStatus]);
 
-  // Silence detection for auto-hangup
+  // Silence detection management
   useEffect(() => {
     if (callStatus === 'connected') {
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current);
-      }
-      
-      silenceTimeoutRef.current = setTimeout(() => {
-        if (Date.now() - lastSpeechTime > 10000) { // 10 seconds of silence
-          toast({
-            title: "Call ended due to silence",
-            description: "No speech detected for 10 seconds",
-            variant: "destructive"
-          });
-          handleEndCall();
-        }
-      }, 10000);
+      silenceDetection.startMonitoring();
+    } else {
+      silenceDetection.stopMonitoring();
     }
     
     return () => {
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current);
-      }
+      silenceDetection.stopMonitoring();
     };
-  }, [callStatus, lastSpeechTime, toast]);
+  }, [callStatus, silenceDetection]);
 
   // Room event handlers
   useEffect(() => {
@@ -105,15 +106,26 @@ export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
     const handleParticipantConnected = (participant: RemoteParticipant) => {
       setConnectedParticipants(prev => [...prev, participant.identity]);
       
+      console.log('📞 Participant connected to call', {
+        identity: participant.identity,
+        participantSid: participant.sid,
+        timestamp: new Date().toISOString()
+      });
+      
       toast({
         title: "Caller joined",
         description: `${participant.identity} is now in the call`,
       });
 
-      // Subscribe to audio tracks
+      // Subscribe to audio tracks and monitor for silence detection
       participant.audioTrackPublications.forEach((publication) => {
         if (publication.track && audioElementRef.current) {
           publication.track.attach(audioElementRef.current);
+          
+          // Add to silence detection monitoring
+          if (publication.track instanceof RemoteAudioTrack) {
+            silenceDetection.addAudioTrack(publication.track);
+          }
         }
       });
     };
@@ -132,8 +144,31 @@ export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
       if (track.kind === Track.Kind.Audio && audioElementRef.current) {
         track.attach(audioElementRef.current);
         
-        // Reset silence timer on audio activity
-        setLastSpeechTime(Date.now());
+        console.log('🎵 Audio track subscribed', {
+          trackSid: track.sid,
+          participantIdentity: participant.identity,
+          timestamp: new Date().toISOString()
+        });
+        
+        // Add to silence detection monitoring
+        if (track instanceof RemoteAudioTrack) {
+          silenceDetection.addAudioTrack(track);
+        }
+      }
+    };
+
+    const handleTrackUnsubscribed = (track: RemoteTrack, publication: any, participant: RemoteParticipant) => {
+      if (track.kind === Track.Kind.Audio) {
+        console.log('🎵 Audio track unsubscribed', {
+          trackSid: track.sid,
+          participantIdentity: participant.identity,
+          timestamp: new Date().toISOString()
+        });
+        
+        // Remove from silence detection monitoring
+        if (track instanceof RemoteAudioTrack) {
+          silenceDetection.removeAudioTrack(track);
+        }
       }
     };
 
@@ -142,12 +177,14 @@ export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
     room.on(RoomEvent.ParticipantConnected, handleParticipantConnected);
     room.on(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
     room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
+    room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
 
     return () => {
       room.off(RoomEvent.ConnectionStateChanged, handleConnectionStateChanged);
       room.off(RoomEvent.ParticipantConnected, handleParticipantConnected);
       room.off(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
       room.off(RoomEvent.TrackSubscribed, handleTrackSubscribed);
+      room.off(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
     };
   }, [room, toast]);
 
@@ -176,8 +213,20 @@ export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
       // Connect to LiveKit room
       await room.connect(wsUrl, token);
       
-      // Enable audio track
+      // Enable audio track and add to silence detection
       await room.localParticipant.setMicrophoneEnabled(true);
+      
+      // Add local audio track to monitoring after a short delay to ensure it's ready
+      setTimeout(() => {
+        const localAudioTrack = room.localParticipant.audioTrackPublications.values().next().value?.track;
+        if (localAudioTrack instanceof LocalAudioTrack) {
+          silenceDetection.addAudioTrack(localAudioTrack);
+          console.log('🎤 Local audio track added to monitoring', {
+            trackSid: localAudioTrack.sid,
+            timestamp: new Date().toISOString()
+          });
+        }
+      }, 1000);
       
     } catch (error) {
       console.error('Failed to connect to room:', error);
@@ -212,6 +261,11 @@ export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
     try {
       await room.localParticipant.setMicrophoneEnabled(isAudioMuted);
       setIsAudioMuted(!isAudioMuted);
+      
+      // Record activity when unmuting (user likely about to speak)
+      if (isAudioMuted) {
+        silenceDetection.recordActivity();
+      }
       
       toast({
         title: isAudioMuted ? "Microphone unmuted" : "Microphone muted",

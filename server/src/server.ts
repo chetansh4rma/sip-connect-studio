@@ -106,13 +106,23 @@ app.post('/api/sip/setup', async (req, res) => {
 app.post('/api/twilio/webhook', (req, res) => {
   const { From, To, CallSid } = req.body;
   
-  console.log(`Incoming call from ${From} to ${To}, CallSid: ${CallSid}`);
+  // Create room ID based on timestamp for better uniqueness
+  const timestamp = Date.now();
+  const roomId = `call-${timestamp}`;
+  
+  console.log(`📞 Incoming call from ${From} → assigned to room: ${roomId}`, {
+    from: From,
+    to: To,
+    callSid: CallSid,
+    roomId,
+    timestamp: new Date().toISOString()
+  });
   
   // Generate TwiML response to forward call to LiveKit SIP trunk
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Dial>
-        <Sip>sip:${config.LIVEKIT_SIP_TRUNK_NUMBER}@${config.LIVEKIT_SIP_DOMAIN}?X-LK-CallerId=${encodeURIComponent(From)}&X-LK-RoomName=${encodeURIComponent(CallSid)}</Sip>
+        <Sip>sip:${config.LIVEKIT_SIP_TRUNK_NUMBER}@${config.LIVEKIT_SIP_DOMAIN}?X-LK-CallerId=${encodeURIComponent(From)}&X-LK-RoomName=${encodeURIComponent(roomId)}</Sip>
     </Dial>
 </Response>`;
 
