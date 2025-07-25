@@ -193,7 +193,7 @@ export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
       setCallStatus('connecting');
       
       // Get token from server
-      const response = await fetch('http://localhost:3001/api/token', {
+      const response = await fetch('https://sip-connect-studio-3.onrender.com/api/token', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
