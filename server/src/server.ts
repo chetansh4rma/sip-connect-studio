@@ -105,11 +105,17 @@ app.post('/api/twilio/webhook', (req, res) => {
   const { From, To, CallSid } = req.body;
   const timestamp = Date.now();
   const roomId = `call-${timestamp}`;
-
+ console.log(`📞 Incoming call → assigned to room: ${roomId}`, {
+    from: From,
+    to: To,
+    callSid: CallSid,
+    roomId,
+    timestamp: new Date().toISOString()
+  });
   const response = new Twiml.VoiceResponse();
   response.say({ voice: 'alice' }, 'Please wait while we connect your call.');
   response.pause({ length: 3 });
-  const dial = response.dial({ timeout: 20 });
+  const dial = response.dial({ timeout: 50 });
   dial.sip(
     `sip:${config.LIVEKIT_SIP_TRUNK_NUMBER}@${config.LIVEKIT_SIP_DOMAIN}?X-LK-CallerId=${encodeURIComponent(From)}&X-LK-RoomName=${encodeURIComponent(roomId)}`
   );
