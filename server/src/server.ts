@@ -101,29 +101,45 @@ app.post('/api/sip/setup', async (req, res) => {
 
 import { twiml as Twiml } from 'twilio';
 
-app.post('/api/twilio/webhook', (req, res) => {
-  const { From, To, CallSid } = req.body;
-  const timestamp = Date.now();
-    const roomId = 'support-room';
- console.log(`📞 Incoming call → assigned to room: ${roomId}`, {
-    from: From,
-    to: To,
-    callSid: CallSid,
-    roomId,
-    timestamp: new Date().toISOString()
-  });
-  const response = new Twiml.VoiceResponse();
-  response.say({ voice: 'alice' }, 'Please wait while we connect your call.');
-  response.pause({ length: 3 });
-  const dial = response.dial({ timeout: 50 });
-  dial.sip(
-    `sip:${config.LIVEKIT_SIP_TRUNK_NUMBER}@${config.LIVEKIT_SIP_DOMAIN}?X-LK-CallerId=${encodeURIComponent(From)}&X-LK-RoomName=${encodeURIComponent(roomId)}`
-  );
-  response.say({ voice: 'alice' }, 'Sorry, we could not connect your call. Please try again later.');
+import { twiml as Twiml } from 'twilio';
 
-  res.type('text/xml');
-  res.send(response.toString());
+app.post('/api/twilio/webhook', (req, res) => {
+  try {
+    const { From, CallSid } = req.body;
+    const roomId = `support-room`;
+
+    const response = new Twiml.VoiceResponse();
+
+    // Say something while we dial
+    response.say({ voice: 'alice' }, 'Please wait while we connect your call.');
+    response.pause({ length: 3 });
+
+    if (config.LIVEKIT_SIP_TRUNK_NUMBER && config.LIVEKIT_SIP_DOMAIN) {
+      const sipUri = `sip:${config.LIVEKIT_SIP_TRUNK_NUMBER}@${config.LIVEKIT_SIP_DOMAIN}?X-LK-CallerId=${encodeURIComponent(
+        From || 'unknown'
+      )}&X-LK-RoomName=${encodeURIComponent(roomId)}`;
+
+      const dial = response.dial({ timeout: 50 });
+      dial.sip(sipUri);
+    } else {
+      response.say('Sorry, SIP trunk is not configured.');
+    }
+
+    // Fallback
+    response.say({ voice: 'alice' }, 'Sorry, we could not connect your call.');
+
+    const xml = response.toString();
+    res.type('text/xml').send(xml); // ✅ Always send TwiML (XML)
+  } catch (err) {
+    console.error('❌ Webhook error:', err);
+
+    // Send valid fallback TwiML even on error
+    const errorResponse = new Twiml.VoiceResponse();
+    errorResponse.say('An error occurred. Please try again later.');
+    res.status(200).type('text/xml').send(errorResponse.toString());
+  }
 });
+
 
 
 // Call status tracking
