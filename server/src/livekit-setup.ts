@@ -66,85 +66,45 @@ export async function setupSipTrunk(config: Config): Promise<SipTrunkInfo> {
  * Creates a dispatch rule to route incoming SIP calls to rooms
  */
 export async function createDispatchRule(config: Config): Promise<SipDispatchRuleInfo> {
-  // Instantiate Livekit SipClient to interact with Livekit Cloud API
   const client = new SipClient(config.LIVEKIT_WS_URL, config.LIVEKIT_API_KEY, config.LIVEKIT_API_SECRET);
 
   try {
-    // We are casting to 'any' here for CreateSipDispatchRuleRequest.
-    // This is a workaround because your local SDK's type definitions might not
-    // explicitly include 'dispatchKey' or 'inboundSipTrunking' at the top level
-    // of CreateSipDispatchRuleRequest, even though the Livekit API accepts them.
-    const request: any = { // <-- Cast to 'any' here
-      sipDispatchRuleId: 'pstn-to-room-rule', // Unique ID for this rule
-      name: 'PSTN Call Router',
-      metadata: 'Routes incoming PSTN calls to LiveKit rooms dynamically',
-
-      // --- CRITICAL CONFIGURATION FOR SIP DISPATCH RULE ---
-
-      // The 'dispatchKey' is the specific SIP 'user' part Livekit will look for
-      // in the incoming SIP URI (e.g., sip:+18563918711@your.domain.livekit.cloud).
-      // It MUST match your config.LIVEKIT_SIP_TRUNK_NUMBER.
-      dispatchKey: config.LIVEKIT_SIP_TRUNK_NUMBER, // e.g., "8563918711" or "+18563918711"
-
-      // This flag tells Livekit that this rule is for INBOUND SIP calls through a trunk.
-      inboundSipTrunking: true,
-
-      // Link this dispatch rule to the specific SIP Trunk you created.
-      // Make sure 'twilio-pstn-trunk' matches the sipTrunkId used in setupSipTrunk.
-      trunkIds: ['twilio-pstn-trunk'],
-
-      // The 'target' object defines how Livekit should map incoming SIP call details
-      // to a Livekit room and participant based on SIP headers.
-      target: {
-        // Get the Livekit room name from the 'X-LK-RoomName' SIP header that Twilio sends.
-        roomName: {
-          fromHeader: 'X-LK-RoomName'
-        },
-        // Get the Livekit participant identity from the 'X-LK-CallerId' SIP header.
-        participantIdentity: {
-          fromHeader: 'X-LK-CallerId'
-        },
-        // Automatically publish the SIP participant's audio to the Livekit room.
-        autoPublish: {
-          audio: true,
-          video: false // Assuming this is a voice-only call
+    const request: CreateSipDispatchRuleRequest = {
+      // You can give it a new name to avoid confusion
+      name: 'PSTN Auto-Room Rule',
+      
+      // Link this rule to the trunk you created earlier
+      trunkIds: ['twilio-pstn-trunk'], 
+      
+      // --- THIS IS THE MAGIC PART ---
+      // Instead of using header-based routing, we create an "Individual" rule.
+      rule: {
+        dispatchRuleIndividual: {
+          // This prefix will be added to the beginning of the room name.
+          // For a call to +18563918711, the room will be named: "pstn_room_18563918711"
+          // Make sure your web app joins this exact room name!
+          roomPrefix: 'pstn_room_', 
         }
       },
 
-      // If a room with the extracted roomName (from X-LK-RoomName) doesn't exist,
-      // Livekit will automatically create it. Essential for dynamic rooms.
-      createRoom: true,
-
-      // Optional: You can set a default room preset if desired.
-      roomPreset: 'video_call', // Consider 'audio_call' for voice-only
-      // Optional: Default participant name if 'X-LK-CallerId' is not available or for display.
-      participantName: 'PSTN Caller'
-      // You can remove hidePhoneNumber and participantMetadata if not strictly needed
-      // hidePhoneNumber: false,
-      // participantMetadata: JSON.stringify({
-      //   source: 'pstn',
-      //   callType: 'incoming'
-      // })
+      // Configure the room to close if the caller is alone for 20 seconds.
+      roomConfig: {
+        emptyTimeout: 20
+      }
     };
 
-    console.log('Attempting to create/update SIP dispatch rule with configuration:', {
-      ruleId: request.sipDispatchRuleId,
+    console.log('Attempting to create/update a SIMPLE SIP dispatch rule:', {
       name: request.name,
-      dispatchKey: request.dispatchKey,
-      inboundSipTrunking: request.inboundSipTrunking,
       trunkIds: request.trunkIds,
-      targetRoomNameSource: request.target.roomName,
-      targetParticipantIdentitySource: request.target.participantIdentity,
-      createRoom: request.createRoom
+      ruleType: 'Individual',
+      roomPrefix: request.rule?.dispatchRuleIndividual?.roomPrefix
     });
 
-    // Call the LiveKit API to create or update the SIP Dispatch Rule
+    // Use the same update function to create or update the rule
     const dispatchInfo = await client.updateSipDispatchRule(request);
 
     console.log(`✓ SIP dispatch rule '${dispatchInfo.name}' created/updated successfully`);
-    console.log(`  - Rule ID: ${dispatchInfo.sipDispatchRuleId}`);
-    console.log(`  - Routes calls matching '${request.dispatchKey}' to rooms from 'X-LK-RoomName' header.`);
-    console.log(`  - Participant identity from 'X-LK-CallerId' header.`);
+    console.log(`  - Rule will now automatically create rooms for calls on trunk 'twilio-pstn-trunk'.`);
 
     return dispatchInfo;
 
