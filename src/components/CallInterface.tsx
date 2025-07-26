@@ -10,13 +10,12 @@ import { useSilenceDetection } from '@/hooks/useSilenceDetection';
 
 interface CallInterfaceProps {
   roomName?: string;
-  defaultRoomId?: string;
   onCallEnd?: () => void;
 }
 
 type CallStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error';
 
-export function CallInterface({ roomName, defaultRoomId, onCallEnd }: CallInterfaceProps) {
+export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
   const [room] = useState(() => new Room());
   const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.Disconnected);
   const [callStatus, setCallStatus] = useState<CallStatus>('idle');
@@ -355,47 +354,31 @@ export function CallInterface({ roomName, defaultRoomId, onCallEnd }: CallInterf
           {/* Room Connection */}
           {callStatus === 'idle' && (
             <div className="space-y-4">
-              {defaultRoomId && (
-                <div className="text-center">
-                  <Button
-                    onClick={() => connectToRoom(defaultRoomId)}
-                    className="bg-gradient-call"
-                    size="lg"
-                  >
-                    <Phone className="w-4 h-4 mr-2" />
-                    Join Call {defaultRoomId}
-                  </Button>
-                </div>
-              )}
-              {!defaultRoomId && (
-                <>
-                  <div className="text-center text-muted-foreground">
-                    Enter a room name to join a call, or wait for an incoming call
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Room name (e.g., call-12345)"
-                      className="flex-1 px-3 py-2 border border-input rounded-md bg-background"
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter' && e.currentTarget.value) {
-                          connectToRoom(e.currentTarget.value);
-                        }
-                      }}
-                    />
-                    <Button
-                      onClick={() => {
-                        const input = document.querySelector('input') as HTMLInputElement;
-                        if (input?.value) connectToRoom(input.value);
-                      }}
-                      className="bg-gradient-call"
-                    >
-                      <Phone className="w-4 h-4 mr-2" />
-                      Join Call
-                    </Button>
-                  </div>
-                </>
-              )}
+              <div className="text-center text-muted-foreground">
+                Enter a room name to join a call, or wait for an incoming call
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Room name (e.g., call-12345)"
+                  className="flex-1 px-3 py-2 border border-input rounded-md bg-background"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && e.currentTarget.value) {
+                      connectToRoom(e.currentTarget.value);
+                    }
+                  }}
+                />
+                <Button
+                  onClick={() => {
+                    const input = document.querySelector('input') as HTMLInputElement;
+                    if (input?.value) connectToRoom(input.value);
+                  }}
+                  className="bg-gradient-call"
+                >
+                  <Phone className="w-4 h-4 mr-2" />
+                  Join Call
+                </Button>
+              </div>
             </div>
           )}
 

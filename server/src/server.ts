@@ -101,60 +101,44 @@ app.post('/api/sip/setup', async (req, res) => {
 
 import { twiml as Twiml } from 'twilio';
 
-// Helper to strip + and country codes (assumes NANP)
-// e.g., "+15551234567" → "5551234567"
-function extractRoomId(phone: string): string {
-  // Remove all non-digits
-  let digits = phone.replace(/\D/g, '');
-  // Remove country code if present (NANP, leading '1')
-  if (digits.length === 11 && digits.startsWith('1')) {
-    digits = digits.substring(1);
-  }
-  // Support other cases by always returning last 10 digits if >10 digits
-  if (digits.length > 10) {
-    digits = digits.slice(-10);
-  }
-  return digits;
-}
 
 app.post('/api/twilio/webhook', (req, res) => {
   try {
-    const { To, CallSid } = req.body;
-    
-    // For debugging, just log that the call is being forwarded.
-    console.log(`[STATIC TEST] Call ${CallSid} received. Forwarding to LiveKit trunk.`);
-    console.log(`Target number from Twilio: ${To}`);
+    const { From, CallSid } = req.body;
+    const roomId = `support-room`;
 
-    // This is the number associated with your LiveKit trunk.
-    // Make sure it matches the number in your LiveKit Dashboard.
-    const livekitTrunkNumber = config.LIVEKIT_SIP_TRUNK_NUMBER; 
+    const response = new Twiml.VoiceResponse();
 
-    // This is the SIP domain for your LiveKit project.
-    const sipDomain = config.LIVEKIT_SIP_DOMAIN;
+    // Say something while we dial
+    response.say({ voice: 'alice' }, 'Please wait while we connect your call.');
+    response.pause({ length: 3 });
 
-    // Construct the simplest possible SIP URI. No headers, no params.
-    const sipUri = `sip:${livekitTrunkNumber}@${sipDomain}`;
-    
-    console.log(`Dialing simple SIP URI: ${sipUri}`);
+    if (config.LIVEKIT_SIP_TRUNK_NUMBER && config.LIVEKIT_SIP_DOMAIN) {
+      const sipUri = `sip:${config.LIVEKIT_SIP_TRUNK_NUMBER}@${config.LIVEKIT_SIP_DOMAIN}?X-LK-CallerId=${encodeURIComponent(
+        From || 'unknown'
+      )}&X-LK-RoomName=${encodeURIComponent(roomId)}`;
 
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Dial timeout="25">
-        <Sip>${sipUri}</Sip>
-    </Dial>
-</Response>`;
+      const dial = response.dial({ timeout: 50 });
+      dial.sip(sipUri);
+    } else {
+      response.say('Sorry, SIP trunk is not configured.');
+    }
 
-    res.status(200).type('text/xml').send(twiml);
+    // Fallback
+    response.say({ voice: 'alice' }, 'Sorry, we could not connect your call.');
 
-  } catch (error) {
-    console.error('❌ Webhook error:', error);
-    const errorResponse = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say>An application error occurred.</Say>
-</Response>`;
-    res.status(500).type('text/xml').send(errorResponse);
+    const xml = response.toString();
+    res.type('text/xml').send(xml); // ✅ Always send TwiML (XML)
+  } catch (err) {
+    console.error('❌ Webhook error:', err);
+
+    // Send valid fallback TwiML even on error
+    const errorResponse = new Twiml.VoiceResponse();
+    errorResponse.say('An error occurred. Please try again later.');
+    res.status(200).type('text/xml').send(errorResponse.toString());
   }
 });
+
 
 
 // Call status tracking
