@@ -101,15 +101,30 @@ app.post('/api/sip/setup', async (req, res) => {
 
 import { twiml as Twiml } from 'twilio';
 
+// Helper to strip + and country codes (assumes NANP)
+// e.g., "+15551234567" → "5551234567"
+function extractRoomId(phone: string): string {
+  // Remove all non-digits
+  let digits = phone.replace(/\D/g, '');
+  // Remove country code if present (NANP, leading '1')
+  if (digits.length === 11 && digits.startsWith('1')) {
+    digits = digits.substring(1);
+  }
+  // Support other cases by always returning last 10 digits if >10 digits
+  if (digits.length > 10) {
+    digits = digits.slice(-10);
+  }
+  return digits;
+}
 
 app.post('/api/twilio/webhook', (req, res) => {
   try {
     const { From, CallSid } = req.body;
-    const roomId = `support-room`;
+    // Use caller's phone number with country code stripped as room ID
+    const roomId = extractRoomId(From || '');
 
     const response = new Twiml.VoiceResponse();
 
-    // Say something while we dial
     response.say({ voice: 'alice' }, 'Please wait while we connect your call.');
     response.pause({ length: 3 });
 
@@ -124,11 +139,10 @@ app.post('/api/twilio/webhook', (req, res) => {
       response.say('Sorry, SIP trunk is not configured.');
     }
 
-    // Fallback
     response.say({ voice: 'alice' }, 'Sorry, we could not connect your call.');
 
     const xml = response.toString();
-    res.type('text/xml').send(xml); // ✅ Always send TwiML (XML)
+    res.type('text/xml').send(xml);
   } catch (err) {
     console.error('❌ Webhook error:', err);
 
@@ -138,8 +152,6 @@ app.post('/api/twilio/webhook', (req, res) => {
     res.status(200).type('text/xml').send(errorResponse.toString());
   }
 });
-
-
 
 // Call status tracking
 app.post('/api/call/status', (req, res) => {
