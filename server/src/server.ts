@@ -99,7 +99,8 @@ app.post('/api/twilio/webhook', (req, res) => {
   console.log(`📱 Call SID: ${CallSid}`);
   console.log(`🔗 Full SIP URI: sip:${process.env.LIVEKIT_SIP_TRUNK_NUMBER}@${process.env.LIVEKIT_SIP_DOMAIN}?X-LK-RoomName=${roomId}&X-LK-CallerId=${encodeURIComponent(From)}`);
   console.log(`📋 Original Room ID (what we're sending): "${roomId}"`);
-  console.log(`⚠️  LiveKit may add suffix - check LiveKit dashboard for actual room name`);
+  console.log(`⚠️  With dispatchRuleIndividual: LiveKit will IGNORE X-LK-RoomName and create: call_${roomId}_[random_suffix]`);
+  console.log(`⚠️  Check LiveKit dashboard for actual room name - it will be different!`);
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
