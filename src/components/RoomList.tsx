@@ -14,6 +14,15 @@ interface RoomListProps {
   onJoinRoom: (roomName: string) => void;
 }
 
+// Extract clean room ID from phone number (same logic as server)
+function extractRoomId(phone: string): string {
+  let digits = phone.replace(/\D/g, ''); // Remove all non-digits
+  if (digits.length > 10) {
+    digits = digits.slice(-10); // Always return last 10 digits
+  }
+  return digits;
+}
+
 export function RoomList({ onJoinRoom }: RoomListProps) {
   const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
   const { toast } = useToast();
@@ -31,11 +40,14 @@ export function RoomList({ onJoinRoom }: RoomListProps) {
   }, []);
 
   const handleJoinRoom = (roomName: string) => {
+    const cleanRoomId = extractRoomId(roomName);
+    console.log(`📋 RoomList joining: "${roomName}" -> Clean ID: "${cleanRoomId}"`);
+    
     toast({
       title: "Joining room",
-      description: `Connecting to room ${roomName}...`,
+      description: `Connecting to room ${cleanRoomId}...`,
     });
-    onJoinRoom(roomName);
+    onJoinRoom(cleanRoomId);
   };
 
   return (

@@ -15,6 +15,15 @@ interface CallInterfaceProps {
 
 type CallStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error';
 
+// Extract clean room ID from phone number (same logic as server)
+function extractRoomId(phone: string): string {
+  let digits = phone.replace(/\D/g, ''); // Remove all non-digits
+  if (digits.length > 10) {
+    digits = digits.slice(-10); // Always return last 10 digits
+  }
+  return digits;
+}
+
 export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
   const [room] = useState(() => new Room());
   const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.Disconnected);
@@ -192,6 +201,10 @@ export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
     try {
       setCallStatus('connecting');
       
+      // Apply same room ID extraction as server for consistency
+      const cleanRoomId = extractRoomId(targetRoomName);
+      console.log(`🌐 Browser joining room: "${targetRoomName}" -> Clean ID: "${cleanRoomId}"`);
+      
       // Get token from server
       const response = await fetch('https://sip-connect-studio-3.onrender.com/api/token', {
         method: 'POST',
@@ -199,7 +212,7 @@ export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          roomName: targetRoomName,
+          roomName: cleanRoomId,
           identity: `browser-client-${Date.now()}`
         }),
       });
