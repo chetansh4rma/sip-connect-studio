@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Phone, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -32,6 +33,8 @@ function extractRoomId(phone: string): string {
 
 export function RoomList({ onJoinRoom }: RoomListProps) {
   const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
+  const [pendingPstnRoom, setPendingPstnRoom] = useState<string | null>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const { toast } = useToast();
   const autoConnectedRef = useRef<Set<string>>(new Set());
 
@@ -50,7 +53,7 @@ export function RoomList({ onJoinRoom }: RoomListProps) {
         
         setAvailableRooms(rooms);
         
-        // Auto-connect to PSTN rooms (pattern: room__+[phone]_[id])
+        // Check for new PSTN rooms and prompt user
         const pstnRooms = rooms.filter(room => 
           room.name.startsWith('room__+') && 
           room.participantCount > 0 &&
@@ -61,12 +64,18 @@ export function RoomList({ onJoinRoom }: RoomListProps) {
           const targetRoom = pstnRooms[0];
           autoConnectedRef.current.add(targetRoom.name);
           
-          console.log(`🤖 Auto-connecting to PSTN room: ${targetRoom.name}`);
+          // Extract phone number for display
+          const phoneMatch = targetRoom.name.match(/room__\+(\d+)_/);
+          const phoneNumber = phoneMatch ? phoneMatch[1] : 'Unknown';
+          
+          console.log(`📞 Incoming PSTN call detected: ${targetRoom.name}`);
+          setPendingPstnRoom(targetRoom.name);
+          setShowConfirmDialog(true);
+          
           toast({
-            title: "Auto-connecting",
-            description: `Joining PSTN call room ${targetRoom.name}`,
+            title: "Incoming Call",
+            description: `Call from +${phoneNumber}`,
           });
-          onJoinRoom(targetRoom.name);
         }
       }
     } catch (error) {
@@ -95,45 +104,88 @@ export function RoomList({ onJoinRoom }: RoomListProps) {
     onJoinRoom(cleanRoomId);
   };
 
+  const handleAcceptCall = () => {
+    if (pendingPstnRoom) {
+      console.log(`✅ User accepted call: ${pendingPstnRoom}`);
+      onJoinRoom(pendingPstnRoom);
+      setShowConfirmDialog(false);
+      setPendingPstnRoom(null);
+    }
+  };
+
+  const handleDeclineCall = () => {
+    console.log(`❌ User declined call: ${pendingPstnRoom}`);
+    setShowConfirmDialog(false);
+    setPendingPstnRoom(null);
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5" />
-          Available Rooms
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {availableRooms.length === 0 ? (
-          <p className="text-muted-foreground">No active rooms</p>
-        ) : (
-          <div className="space-y-3">
-            {availableRooms.map((room) => (
-              <div
-                key={room.name}
-                className="flex items-center justify-between p-3 border rounded-lg"
-              >
-                <div className="flex items-center gap-3">
-                  <Phone className="h-4 w-4 text-primary" />
-                  <div>
-                    <p className="font-medium">Room: {room.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {room.participantCount} participant(s) • {room.lastActivity}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  onClick={() => handleJoinRoom(room.name)}
-                  size="sm"
-                  variant={room.participantCount > 0 ? "default" : "outline"}
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Available Rooms
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {availableRooms.length === 0 ? (
+            <p className="text-muted-foreground">No active rooms</p>
+          ) : (
+            <div className="space-y-3">
+              {availableRooms.map((room) => (
+                <div
+                  key={room.name}
+                  className="flex items-center justify-between p-3 border rounded-lg"
                 >
-                  Join Call
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                  <div className="flex items-center gap-3">
+                    <Phone className="h-4 w-4 text-primary" />
+                    <div>
+                      <p className="font-medium">Room: {room.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {room.participantCount} participant(s) • {room.lastActivity}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => handleJoinRoom(room.name)}
+                    size="sm"
+                    variant={room.participantCount > 0 ? "default" : "outline"}
+                  >
+                    Join Call
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Phone className="h-5 w-5 text-green-500" />
+              Incoming Call
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingPstnRoom && (() => {
+                const phoneMatch = pendingPstnRoom.match(/room__\+(\d+)_/);
+                const phoneNumber = phoneMatch ? phoneMatch[1] : 'Unknown';
+                return `You have an incoming call from +${phoneNumber}. Would you like to answer?`;
+              })()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleDeclineCall}>
+              Decline
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleAcceptCall} className="bg-green-600 hover:bg-green-700">
+              Answer Call
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
