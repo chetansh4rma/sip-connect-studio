@@ -87,37 +87,52 @@ function extractRoomId(phone: string): string {
 import { twiml as Twiml } from 'twilio';
 
 
+// ✨ THIS IS THE FINAL, CORRECT WEBHOOK ✨
+
+// This is the helper function you already have. It's perfect.
+function extractRoomId(phone: string): string {
+  let digits = phone.replace(/\D/g, ''); // Remove all non-digits
+  if (digits.length > 10) {
+    digits = digits.slice(-10); // Always return last 10 digits
+  }
+  return digits;
+}
+
 app.post('/api/twilio/webhook', (req, res) => {
-  const { From, To, CallSid } = req.body;
+  try {
+    const { From, To, CallSid } = req.body;
 
-  // Strip "+" and country code, use only last 10 digits (Indian number logic)
-  const cleanNumber = From.replace(/^\+91/, ''); // customize this as needed
-  const roomId = cleanNumber;
+    // --- CAPTURING THE ROOM NAME ---
+    // Here, we CREATE and therefore "capture" the exact room name.
+    const cleanRoomId = extractRoomId(From); // e.g., "7626818255"
 
-  console.log(`📞 Incoming call from ${From} → Room: ${roomId}`);
-  console.log(`🏠 Room ID created: "${roomId}"`);
-  console.log(`📱 Call SID: ${CallSid}`);
-  console.log(`🔗 Full SIP URI: sip:${process.env.LIVEKIT_SIP_TRUNK_NUMBER}@${process.env.LIVEKIT_SIP_DOMAIN}?X-LK-RoomName=${roomId}&X-LK-CallerId=${encodeURIComponent(From)}`);
-  console.log(`📋 Original Room ID (what we're sending): "${roomId}"`);
-  console.log(`⚠️  With dispatchRuleIndividual: LiveKit will IGNORE X-LK-RoomName and create: call_${roomId}_[random_suffix]`);
-  console.log(`⚠️  Check LiveKit dashboard for actual room name - it will be different!`);
+    // This is where you would save the name to a database or send a notification
+    // so your front-end knows which room to join.
+    console.log(`✅ ROOM CAPTURED: Call from ${From} is assigned to room: ${cleanRoomId}`);
+    
+    // --- SENDING THE NAME TO LIVEKIT ---
+    // Now we tell LiveKit to use this exact room name.
+    const identity = From;
+    const livekitTrunkNumber = config.LIVEKIT_SIP_TRUNK_NUMBER; 
+    const sipDomain = config.LIVEKIT_SIP_DOMAIN;
 
-  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+    const sipUri = `sip:${livekitTrunkNumber}@${sipDomain}?X-LK-RoomName=${encodeURIComponent(cleanRoomId)}&X-LK-Identity=${encodeURIComponent(identity)}`;
+
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>Please wait while we connect your call.</Say>
-  <Pause length="2"/>
-  <Dial timeout="20">
-    <Sip>
-      sip:${process.env.LIVEKIT_SIP_TRUNK_NUMBER}@${process.env.LIVEKIT_SIP_DOMAIN}?X-LK-RoomName=${roomId}&X-LK-CallerId=${encodeURIComponent(From)}
-    </Sip>
-  </Dial>
+    <Dial timeout="25">
+        <Sip>${sipUri.replace(/&/g, '&')}</Sip>
+    </Dial>
 </Response>`;
 
-  res.set('Content-Type', 'text/xml');
-  res.send(twiml);
+    res.status(200).type('text/xml').send(twiml);
+
+  } catch (error) {
+    console.error('❌ Webhook error:', error);
+    const errorResponse = `<?xml version="1.0" encoding="UTF-8"?><Response><Say>An application error occurred.</Say></Response>`;
+    res.status(500).type('text/xml').send(errorResponse);
+  }
 });
-
-
 
 // Call status tracking
 app.post('/api/call/status', (req, res) => {
