@@ -1,4 +1,4 @@
-import { SipTrunkInfo, SipDispatchRuleInfo, CreateSipTrunkRequest, CreateSipDispatchRuleRequest } from 'livekit-server-sdk';
+import { SipTrunkInfo, SipDispatchRuleInfo, CreateSipTrunkRequest, CreateSipDispatchRuleRequest, RoomServiceClient } from 'livekit-server-sdk';
 import type { Config } from './config';
 
 /**
@@ -57,29 +57,29 @@ export async function setupSipTrunk(config: Config): Promise<SipTrunkInfo> {
 
 /**
  * Creates a dispatch rule to route incoming SIP calls to rooms
+ * 🔥 FIXED: This addresses the random suffix issue
  */
 export async function createDispatchRule(config: Config): Promise<SipDispatchRuleInfo> {
   try {
     const request: CreateSipDispatchRuleRequest = {
-      sipDispatchRuleId: 'pstn-to-room-rule',
-      name: 'PSTN Call Router', 
-      metadata: 'Routes incoming PSTN calls to LiveKit rooms',
-      // Route to trunk
+      sipDispatchRuleId: 'header-based-rooms', // Match your existing rule ID
+      name: 'header-based-rooms',
+      metadata: 'Routes calls to rooms based on caller number without suffixes',
       trunkIds: ['twilio-pstn-trunk'],
-      // FIXED: Use proper room naming convention with consistent format
-      // Try different variable names based on what LiveKit provides
-      roomName: 'room-test', // Changed from ${caller_id} to room_${caller_number}
-      // Alternative options to try:
-      // roomName: 'room_${from}',
-      // roomName: 'room_${phone_number}',
-      // roomName: 'room_${calling_number}',
+      
+      // 🔥 FIX: Use ${from} instead of ${sip_call_id} to avoid random suffix
+      roomName: 'room_${from}', // This will use the calling number
+      
+      // Alternative options if ${from} doesn't work:
+      // roomName: 'room_${caller_number}',
+      // roomName: '${from}', // Without room_ prefix
       
       roomPreset: 'video_call',
-      // Auto-create rooms for incoming calls
       hidePhoneNumber: false,
-      // Participant settings - also updated to match
-      participantIdentity: 'pstn-caller-${caller_number}', // Changed from ${caller_id}
-      participantName: 'Caller ${caller_number}', // Changed from ${caller_id}
+      
+      // Use consistent identity format
+      participantIdentity: 'caller-${from}',
+      participantName: 'Phone Caller ${from}',
       participantMetadata: JSON.stringify({
         source: 'pstn',
         callType: 'incoming'
@@ -90,11 +90,10 @@ export async function createDispatchRule(config: Config): Promise<SipDispatchRul
       ruleId: request.sipDispatchRuleId,
       name: request.name,
       trunkIds: request.trunkIds,
-      roomNameTemplate: request.roomName // Log the template for debugging
+      roomNameTemplate: request.roomName // This should show 'room_${from}'
     });
 
     // Note: In a real implementation, you would call the LiveKit API here
-    // For this demo, we'll simulate the response
     const dispatchInfo: SipDispatchRuleInfo = {
       sipDispatchRuleId: request.sipDispatchRuleId!,
       name: request.name!,
@@ -122,56 +121,14 @@ export async function createDispatchRule(config: Config): Promise<SipDispatchRul
 }
 
 /**
- * Alternative dispatch rule with explicit room name handling
+ * Creates a room service client for monitoring
  */
-export async function createDispatchRuleWithExplicitRoomHandling(config: Config): Promise<SipDispatchRuleInfo> {
-  try {
-    const request: CreateSipDispatchRuleRequest = {
-      sipDispatchRuleId: 'header-based-rooms', // Match your existing rule ID
-      name: 'header-based-rooms',
-      metadata: 'Routes calls to rooms based on caller number without suffixes',
-      trunkIds: ['twilio-pstn-trunk'],
-      
-      // Option 1: Simple room name without variables (static)
-      // roomName: 'main-room',
-      
-      // Option 2: Use header-based routing if supported
-      roomName: 'room_${sip_call_id}', // This might be causing the suffix
-      
-      // Option 3: Most likely correct format
-      // roomName: 'room_${from}', // Try this if caller_number doesn't work
-      
-      roomPreset: 'video_call',
-      hidePhoneNumber: false,
-      participantIdentity: 'caller-${from}',
-      participantName: 'Phone Caller',
-      participantMetadata: JSON.stringify({
-        source: 'pstn',
-        callType: 'incoming',
-        preventRandomSuffix: true
-      })
-    };
-
-    // In a real implementation, call the actual LiveKit API
-    const dispatchInfo: SipDispatchRuleInfo = {
-      sipDispatchRuleId: request.sipDispatchRuleId!,
-      name: request.name!,
-      metadata: request.metadata || '',
-      trunkIds: request.trunkIds || [],
-      roomName: request.roomName!,
-      roomPreset: request.roomPreset,
-      hidePhoneNumber: request.hidePhoneNumber || false,
-      participantIdentity: request.participantIdentity!,
-      participantName: request.participantName,
-      participantMetadata: request.participantMetadata
-    };
-
-    return dispatchInfo;
-
-  } catch (error) {
-    console.error('Failed to create dispatch rule:', error);
-    throw error;
-  }
+export function createRoomServiceClient(config: Config): RoomServiceClient {
+  return new RoomServiceClient(
+    config.LIVEKIT_WS_URL,
+    config.LIVEKIT_API_KEY,
+    config.LIVEKIT_API_SECRET
+  );
 }
 
 /**
