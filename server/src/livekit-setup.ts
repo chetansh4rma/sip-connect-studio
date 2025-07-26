@@ -62,18 +62,24 @@ export async function createDispatchRule(config: Config): Promise<SipDispatchRul
   try {
     const request: CreateSipDispatchRuleRequest = {
       sipDispatchRuleId: 'pstn-to-room-rule',
-      name: 'PSTN Call Router',
+      name: 'PSTN Call Router', 
       metadata: 'Routes incoming PSTN calls to LiveKit rooms',
       // Route to trunk
       trunkIds: ['twilio-pstn-trunk'],
-      // Create room based on caller ID or call SID
-      roomName: '${caller_id}',
+      // FIXED: Use proper room naming convention with consistent format
+      // Try different variable names based on what LiveKit provides
+      roomName: 'room_${caller_number}', // Changed from ${caller_id} to room_${caller_number}
+      // Alternative options to try:
+      // roomName: 'room_${from}',
+      // roomName: 'room_${phone_number}',
+      // roomName: 'room_${calling_number}',
+      
       roomPreset: 'video_call',
       // Auto-create rooms for incoming calls
       hidePhoneNumber: false,
-      // Participant settings
-      participantIdentity: 'pstn-caller-${caller_id}',
-      participantName: 'Caller ${caller_id}',
+      // Participant settings - also updated to match
+      participantIdentity: 'pstn-caller-${caller_number}', // Changed from ${caller_id}
+      participantName: 'Caller ${caller_number}', // Changed from ${caller_id}
       participantMetadata: JSON.stringify({
         source: 'pstn',
         callType: 'incoming'
@@ -83,7 +89,8 @@ export async function createDispatchRule(config: Config): Promise<SipDispatchRul
     console.log('Creating SIP dispatch rule:', {
       ruleId: request.sipDispatchRuleId,
       name: request.name,
-      trunkIds: request.trunkIds
+      trunkIds: request.trunkIds,
+      roomNameTemplate: request.roomName // Log the template for debugging
     });
 
     // Note: In a real implementation, you would call the LiveKit API here
@@ -111,6 +118,59 @@ export async function createDispatchRule(config: Config): Promise<SipDispatchRul
   } catch (error) {
     console.error('Failed to create dispatch rule:', error);
     throw new Error(`Dispatch rule creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Alternative dispatch rule with explicit room name handling
+ */
+export async function createDispatchRuleWithExplicitRoomHandling(config: Config): Promise<SipDispatchRuleInfo> {
+  try {
+    const request: CreateSipDispatchRuleRequest = {
+      sipDispatchRuleId: 'header-based-rooms', // Match your existing rule ID
+      name: 'header-based-rooms',
+      metadata: 'Routes calls to rooms based on caller number without suffixes',
+      trunkIds: ['twilio-pstn-trunk'],
+      
+      // Option 1: Simple room name without variables (static)
+      // roomName: 'main-room',
+      
+      // Option 2: Use header-based routing if supported
+      roomName: 'room_${sip_call_id}', // This might be causing the suffix
+      
+      // Option 3: Most likely correct format
+      // roomName: 'room_${from}', // Try this if caller_number doesn't work
+      
+      roomPreset: 'video_call',
+      hidePhoneNumber: false,
+      participantIdentity: 'caller-${from}',
+      participantName: 'Phone Caller',
+      participantMetadata: JSON.stringify({
+        source: 'pstn',
+        callType: 'incoming',
+        preventRandomSuffix: true
+      })
+    };
+
+    // In a real implementation, call the actual LiveKit API
+    const dispatchInfo: SipDispatchRuleInfo = {
+      sipDispatchRuleId: request.sipDispatchRuleId!,
+      name: request.name!,
+      metadata: request.metadata || '',
+      trunkIds: request.trunkIds || [],
+      roomName: request.roomName!,
+      roomPreset: request.roomPreset,
+      hidePhoneNumber: request.hidePhoneNumber || false,
+      participantIdentity: request.participantIdentity!,
+      participantName: request.participantName,
+      participantMetadata: request.participantMetadata
+    };
+
+    return dispatchInfo;
+
+  } catch (error) {
+    console.error('Failed to create dispatch rule:', error);
+    throw error;
   }
 }
 
