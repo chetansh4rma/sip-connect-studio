@@ -1,5 +1,5 @@
 import React from 'react';
-import { CallInterface } from '@/components/CallInterface';
+import { CallCenter } from '@/components/CallCenter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Phone, Globe, Zap, Shield } from 'lucide-react';
@@ -40,8 +40,8 @@ const Index = () => {
         </div>
       </div>
 
-      {/* Main Call Interface */}
-      <CallInterface />
+      {/* Main Call Center */}
+      <CallCenter />
 
       {/* Architecture Info */}
       <div className="max-w-4xl mx-auto px-6 pb-8">
