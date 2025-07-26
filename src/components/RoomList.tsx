@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Phone, Users } from "lucide-react";
@@ -8,6 +8,13 @@ interface Room {
   name: string;
   participantCount: number;
   lastActivity: string;
+}
+
+interface LiveKitRoom {
+  name: string;
+  sid: string;
+  participants: number;
+  createdAt: string;
 }
 
 interface RoomListProps {
@@ -26,17 +33,55 @@ function extractRoomId(phone: string): string {
 export function RoomList({ onJoinRoom }: RoomListProps) {
   const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
   const { toast } = useToast();
+  const autoConnectedRef = useRef<Set<string>>(new Set());
 
-  // Mock room data - in a real app, this would come from LiveKit API
+  // Fetch rooms from LiveKit API and auto-connect to PSTN rooms
+  const fetchRooms = async () => {
+    try {
+      const response = await fetch('https://sip-connect-studio-3.onrender.com/api/rooms');
+      const data = await response.json();
+      
+      if (Array.isArray(data)) {
+        const rooms: Room[] = data.map((room: LiveKitRoom) => ({
+          name: room.name,
+          participantCount: room.participants,
+          lastActivity: new Date(room.createdAt).toLocaleString()
+        }));
+        
+        setAvailableRooms(rooms);
+        
+        // Auto-connect to PSTN rooms (pattern: room__+[phone]_[id])
+        const pstnRooms = rooms.filter(room => 
+          room.name.startsWith('room__+') && 
+          room.participantCount > 0 &&
+          !autoConnectedRef.current.has(room.name)
+        );
+        
+        if (pstnRooms.length > 0) {
+          const targetRoom = pstnRooms[0];
+          autoConnectedRef.current.add(targetRoom.name);
+          
+          console.log(`🤖 Auto-connecting to PSTN room: ${targetRoom.name}`);
+          toast({
+            title: "Auto-connecting",
+            description: `Joining PSTN call room ${targetRoom.name}`,
+          });
+          onJoinRoom(targetRoom.name);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch rooms:', error);
+    }
+  };
+
   useEffect(() => {
-    // Simulate some active rooms
-    const mockRooms: Room[] = [
-      { name: "7626818255", participantCount: 1, lastActivity: "2 minutes ago" },
-      { name: "5551234567", participantCount: 0, lastActivity: "5 minutes ago" },
-      { name: "9876543210", participantCount: 1, lastActivity: "1 minute ago" },
-    ];
+    // Initial fetch
+    fetchRooms();
     
-    setAvailableRooms(mockRooms);
+    // Poll every 5 seconds
+    const interval = setInterval(fetchRooms, 5000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const handleJoinRoom = (roomName: string) => {
