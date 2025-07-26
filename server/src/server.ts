@@ -88,33 +88,27 @@ import { twiml as Twiml } from 'twilio';
 
 
 app.post('/api/twilio/webhook', (req, res) => {
-  try {
-    const { From, CallSid } = req.body;
-    const cleanRoomId = extractRoomId(From || ''); // Creates clean ID like "7626818255"
-    const identity = From || 'unknown';
+  const { From, To, CallSid } = req.body;
 
-    console.log(`📞 Incoming call from ${From} -> Clean room ID: ${cleanRoomId}`);
-    console.log(`🏠 Room ID being created: "${cleanRoomId}"`);
-    console.log(`👤 Identity: "${identity}"`);
+  const timestamp = Date.now();
+  const roomId = `call-${timestamp}`;
 
-    if (config.LIVEKIT_SIP_TRUNK_NUMBER && config.LIVEKIT_SIP_DOMAIN) {
-      const sipUri = `sip:${config.LIVEKIT_SIP_TRUNK_NUMBER}@${config.LIVEKIT_SIP_DOMAIN}?X-LK-RoomName=${encodeURIComponent(cleanRoomId)}&X-LK-Identity=${encodeURIComponent(identity)}`;
-      
-      const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Dial timeout="25"><Sip>${sipUri.replace(/&/g, '&amp;')}</Sip></Dial></Response>`;
-      
-      res.type('text/xml').send(twiml);
-    } else {
-      const errorTwiml = '<?xml version="1.0" encoding="UTF-8"?><Response><Say>Sorry, SIP trunk is not configured.</Say></Response>';
-      res.type('text/xml').send(errorTwiml);
-    }
+  console.log(`📞 Incoming call from ${From} → Room: ${roomId}`);
 
-  } catch (err) {
-    console.error('❌ Webhook error:', err);
-    
-    // Send valid fallback TwiML even on error
-    const errorTwiml = '<?xml version="1.0" encoding="UTF-8"?><Response><Say>An error occurred. Please try again later.</Say></Response>';
-    res.status(200).type('text/xml').send(errorTwiml);
-  }
+  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">Please wait while we connect your call.</Say>
+  <Pause length="2" />
+  <Dial timeout="20">
+    <Sip>
+      sip:${config.LIVEKIT_SIP_TRUNK_NUMBER}@${config.LIVEKIT_SIP_DOMAIN}?X-LK-CallerId=${encodeURIComponent(From)}&X-LK-RoomName=${encodeURIComponent(roomId)}
+    </Sip>
+  </Dial>
+  <Say voice="alice">Sorry, we could not connect your call. Please try again later.</Say>
+</Response>`;
+
+  res.set('Content-Type', 'text/xml');
+  res.send(twiml);
 });
 
 
