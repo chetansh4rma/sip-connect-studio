@@ -68,7 +68,7 @@ export async function createDispatchRule(config: Config): Promise<SipDispatchRul
       trunkIds: ['twilio-pstn-trunk'],
       // FIXED: Use proper room naming convention with consistent format
       // Try different variable names based on what LiveKit provides
-      roomName: 'room_${caller_number}', // Changed from ${caller_id} to room_${caller_number}
+      roomName: 'room-test', // Changed from ${caller_id} to room_${caller_number}
       // Alternative options to try:
       // roomName: 'room_${from}',
       // roomName: 'room_${phone_number}',
