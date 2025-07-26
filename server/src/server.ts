@@ -123,6 +123,9 @@ app.post('/api/twilio/webhook', (req, res) => {
     // Use caller's phone number with country code stripped as room ID
     const roomId = extractRoomId(From || '');
 
+    // Log the generated room ID for debugging
+    console.log(`[Twilio Webhook] CallSid: ${CallSid}, From: ${From}, Room ID: ${roomId}`);
+
     const response = new Twiml.VoiceResponse();
 
     response.say({ voice: 'alice' }, 'Please wait while we connect your call.');
@@ -152,6 +155,7 @@ app.post('/api/twilio/webhook', (req, res) => {
     res.status(200).type('text/xml').send(errorResponse.toString());
   }
 });
+
 
 // Call status tracking
 app.post('/api/call/status', (req, res) => {
