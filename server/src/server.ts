@@ -119,40 +119,40 @@ function extractRoomId(phone: string): string {
 
 app.post('/api/twilio/webhook', (req, res) => {
   try {
-    const { From, CallSid } = req.body;
-    // Use caller's phone number with country code stripped as room ID
-    const roomId = extractRoomId(From || '');
+    const { To, CallSid } = req.body;
+    
+    // For debugging, just log that the call is being forwarded.
+    console.log(`[STATIC TEST] Call ${CallSid} received. Forwarding to LiveKit trunk.`);
+    console.log(`Target number from Twilio: ${To}`);
 
-    // Log the generated room ID for debugging
-    console.log(`[Twilio Webhook] CallSid: ${CallSid}, From: ${From}, Room ID: ${roomId}`);
+    // This is the number associated with your LiveKit trunk.
+    // Make sure it matches the number in your LiveKit Dashboard.
+    const livekitTrunkNumber = config.LIVEKIT_SIP_TRUNK_NUMBER; 
 
-    const response = new Twiml.VoiceResponse();
+    // This is the SIP domain for your LiveKit project.
+    const sipDomain = config.LIVEKIT_SIP_DOMAIN;
 
-    response.say({ voice: 'alice' }, 'Please wait while we connect your call.');
-    response.pause({ length: 3 });
+    // Construct the simplest possible SIP URI. No headers, no params.
+    const sipUri = `sip:${livekitTrunkNumber}@${sipDomain}`;
+    
+    console.log(`Dialing simple SIP URI: ${sipUri}`);
 
-    if (config.LIVEKIT_SIP_TRUNK_NUMBER && config.LIVEKIT_SIP_DOMAIN) {
-      const sipUri = `sip:${config.LIVEKIT_SIP_TRUNK_NUMBER}@${config.LIVEKIT_SIP_DOMAIN}?X-LK-CallerId=${encodeURIComponent(
-        From || 'unknown'
-      )}&X-LK-RoomName=${encodeURIComponent(roomId)}`;
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Dial timeout="25">
+        <Sip>${sipUri}</Sip>
+    </Dial>
+</Response>`;
 
-      const dial = response.dial({ timeout: 50 });
-      dial.sip(sipUri);
-    } else {
-      response.say('Sorry, SIP trunk is not configured.');
-    }
+    res.status(200).type('text/xml').send(twiml);
 
-    response.say({ voice: 'alice' }, 'Sorry, we could not connect your call.');
-
-    const xml = response.toString();
-    res.type('text/xml').send(xml);
-  } catch (err) {
-    console.error('❌ Webhook error:', err);
-
-    // Send valid fallback TwiML even on error
-    const errorResponse = new Twiml.VoiceResponse();
-    errorResponse.say('An error occurred. Please try again later.');
-    res.status(200).type('text/xml').send(errorResponse.toString());
+  } catch (error) {
+    console.error('❌ Webhook error:', error);
+    const errorResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>An application error occurred.</Say>
+</Response>`;
+    res.status(500).type('text/xml').send(errorResponse);
   }
 });
 
