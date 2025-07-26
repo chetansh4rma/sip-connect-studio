@@ -1,9 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { AccessToken } from 'livekit-server-sdk';
-// We no longer import setupSipTrunk or createDispatchRule to prevent conflicts.
+import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
+import { twiml as Twiml } from 'twilio';
 import { validateEnv } from './config';
+
 dotenv.config();
 
 const app = express();
@@ -16,6 +17,22 @@ app.use(express.json());
 
 // Validate environment variables on startup
 const config = validateEnv();
+
+// Create room service client for monitoring
+const roomClient = new RoomServiceClient(
+  config.LIVEKIT_WS_URL,
+  config.LIVEKIT_API_KEY,
+  config.LIVEKIT_API_SECRET
+);
+
+// Helper function to create clean room ID
+function extractRoomId(phone: string): string {
+  let digits = phone.replace(/\D/g, ''); // Remove all non-digits
+  if (digits.length > 10) {
+    digits = digits.slice(-10); // Always return last 10 digits
+  }
+  return digits;
+}
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -75,20 +92,7 @@ app.post('/api/token', async (req, res) => {
   }
 });
 
-
-import { twiml as Twiml } from 'twilio';
-
-// This is the helper function to create your clean room ID. It's perfect.
-function extractRoomId(phone: string): string {
-  let digits = phone.replace(/\D/g, ''); // Remove all non-digits
-  if (digits.length > 10) {
-    digits = digits.slice(-10); // Always return last 10 digits
-  }
-  return digits;
-}
-
-// This is the final, corrected webhook for the "Header" rule.
-// Enhanced webhook with comprehensive logging
+// Enhanced Twilio webhook with comprehensive logging
 app.post('/api/twilio/webhook', (req, res) => {
   try {
     const { From, To, CallSid, CallStatus, Direction } = req.body;
@@ -115,7 +119,7 @@ app.post('/api/twilio/webhook', (req, res) => {
     const sipDomain = config.LIVEKIT_SIP_DOMAIN;
 
     // Enhanced SIP URI construction with logging
-    const roomName = cleanRoomId; // or use `room_${cleanRoomId}` if needed
+    const roomName = cleanRoomId; // Using clean room ID without prefix
     const sipUri = `sip:${livekitTrunkNumber}@${sipDomain}?X-LK-RoomName=${encodeURIComponent(roomName)}&X-LK-Identity=${encodeURIComponent(identity)}`;
 
     console.log('🌐 === SIP ROUTING ===');
@@ -154,6 +158,100 @@ app.post('/api/twilio/webhook', (req, res) => {
     res.status(500).type('text/xml').send(errorResponse);
   }
 });
+
+// Room monitoring endpoint
+app.get('/api/rooms', async (req, res) => {
+  try {
+    const rooms = await roomClient.listRooms();
+    
+    console.log('🏠 === ACTIVE ROOMS ===');
+    rooms.forEach((room, index) => {
+      console.log(`${index + 1}. Room: ${room.name}`);
+      console.log(`   - SID: ${room.sid}`);
+      console.log(`   - Participants: ${room.numParticipants}`);
+      console.log(`   - Created: ${new Date(room.creationTime * 1000).toISOString()}`);
+      console.log(`   - Duration: ${Math.floor((Date.now() - room.creationTime * 1000) / 1000)}s`);
+    });
+    console.log('🏠 === END ROOMS ===\n');
+
+    res.json({
+      totalRooms: rooms.length,
+      rooms: rooms.map(room => ({
+        name: room.name,
+        sid: room.sid,
+        participants: room.numParticipants,
+        createdAt: new Date(room.creationTime * 1000).toISOString()
+      }))
+    });
+
+  } catch (error) {
+    console.error('❌ Failed to fetch rooms:', error);
+    res.status(500).json({ error: 'Failed to fetch rooms' });
+  }
+});
+
+// Room participants endpoint
+app.get('/api/rooms/:roomName/participants', async (req, res) => {
+  try {
+    const { roomName } = req.params;
+    const participants = await roomClient.listParticipants(roomName);
+    
+    console.log(`👥 === PARTICIPANTS IN ROOM: ${roomName} ===`);
+    participants.forEach((participant, index) => {
+      console.log(`${index + 1}. ${participant.name || participant.identity}`);
+      console.log(`   - Identity: ${participant.identity}`);
+      console.log(`   - State: ${participant.state}`);
+      console.log(`   - Joined: ${new Date(participant.joinedAt * 1000).toISOString()}`);
+      console.log(`   - Audio: ${participant.tracks.find(t => t.type === 'audio') ? '✅' : '❌'}`);
+      console.log(`   - Video: ${participant.tracks.find(t => t.type === 'video') ? '✅' : '❌'}`);
+    });
+    console.log('👥 === END PARTICIPANTS ===\n');
+
+    res.json({
+      roomName,
+      participantCount: participants.length,
+      participants: participants.map(p => ({
+        identity: p.identity,
+        name: p.name,
+        state: p.state,
+        joinedAt: new Date(p.joinedAt * 1000).toISOString()
+      }))
+    });
+
+  } catch (error) {
+    console.error(`❌ Failed to fetch participants for room ${req.params.roomName}:`, error);
+    res.status(500).json({ error: 'Failed to fetch participants' });
+  }
+});
+
+// LiveKit webhook endpoint for real-time events
+app.post('/api/livekit/webhook', express.raw({ type: 'application/webhook+json' }), (req, res) => {
+  try {
+    const event = JSON.parse(req.body.toString());
+    
+    console.log('🔔 === LIVEKIT EVENT ===');
+    console.log(`📅 Event: ${event.event}`);
+    console.log(`🏠 Room: ${event.room?.name || 'N/A'}`);
+    console.log(`👤 Participant: ${event.participant?.identity || 'N/A'}`);
+    console.log(`⏰ Timestamp: ${new Date().toISOString()}`);
+    
+    // Log specific events
+    if (event.event === 'room_started') {
+      console.log(`🎉 Room "${event.room.name}" was created!`);
+    } else if (event.event === 'participant_joined') {
+      console.log(`👋 Participant "${event.participant.identity}" joined room "${event.room.name}"`);
+    }
+    
+    console.log('🔔 === END EVENT ===\n');
+
+    res.status(200).send('OK');
+
+  } catch (error) {
+    console.error('❌ LiveKit webhook error:', error);
+    res.status(400).send('Bad Request');
+  }
+});
+
 // Call status tracking
 app.post('/api/call/status', (req, res) => {
   const { callSid, status, duration, reason } = req.body;
@@ -165,6 +263,52 @@ app.post('/api/call/status', (req, res) => {
   });
   
   res.json({ success: true, message: 'Status logged' });
+});
+
+// Debug endpoint to test room creation
+app.post('/api/debug/test-room', async (req, res) => {
+  try {
+    const { phoneNumber } = req.body;
+    const cleanRoomId = extractRoomId(phoneNumber);
+    
+    console.log('🧪 === ROOM CREATION TEST ===');
+    console.log(`📱 Input Phone: ${phoneNumber}`);
+    console.log(`🎯 Clean Room ID: ${cleanRoomId}`);
+    console.log(`🏠 Expected Room: ${cleanRoomId}`);
+    
+    // Create a token for this room to test if it works
+    const token = new AccessToken(
+      config.LIVEKIT_API_KEY,
+      config.LIVEKIT_API_SECRET,
+      {
+        identity: `test-${cleanRoomId}`,
+        ttl: '10m',
+      }
+    );
+
+    token.addGrant({
+      room: cleanRoomId, // Using clean room ID without prefix
+      roomJoin: true,
+      canPublish: true,
+      canSubscribe: true,
+    });
+
+    const jwt = token.toJwt();
+    
+    console.log(`✅ Token generated for room: ${cleanRoomId}`);
+    console.log('🧪 === END TEST ===\n');
+
+    res.json({
+      success: true,
+      roomId: cleanRoomId,
+      token: jwt,
+      wsUrl: config.LIVEKIT_WS_URL
+    });
+
+  } catch (error) {
+    console.error('❌ Test failed:', error);
+    res.status(500).json({ error: 'Test failed' });
+  }
 });
 
 // Error handling middleware
@@ -182,6 +326,9 @@ app.listen(PORT, () => {
   console.log(`📞 Twilio webhook URL: http://YourRenderURL.onrender.com/api/twilio/webhook`);
   console.log(`🔗 LiveKit WebSocket: ${config.LIVEKIT_WS_URL}`);
   console.log(`🌐 Client URL: ${process.env.CLIENT_URL || 'http://localhost:8080'}`);
+  console.log(`🔍 Debug endpoints:`);
+  console.log(`   - GET /api/rooms - List active rooms`);
+  console.log(`   - POST /api/debug/test-room - Test room creation`);
 });
 
 export default app;
