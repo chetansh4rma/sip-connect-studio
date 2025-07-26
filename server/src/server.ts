@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { AccessToken } from 'livekit-server-sdk';
-import { setupSipTrunk, createDispatchRule } from './livekit-setup';
+// We no longer import setupSipTrunk or createDispatchRule to prevent conflicts.
 import { validateEnv } from './config';
 dotenv.config();
 
@@ -76,13 +76,9 @@ app.post('/api/token', async (req, res) => {
 });
 
 
-
 import { twiml as Twiml } from 'twilio';
 
-
-// ✨ THIS IS THE FINAL, CORRECT WEBHOOK ✨
-
-// This is the helper function you already have. It's perfect.
+// This is the helper function to create your clean room ID. It's perfect.
 function extractRoomId(phone: string): string {
   let digits = phone.replace(/\D/g, ''); // Remove all non-digits
   if (digits.length > 10) {
@@ -91,26 +87,23 @@ function extractRoomId(phone: string): string {
   return digits;
 }
 
+// This is the final, corrected webhook for the "Header" rule.
 app.post('/api/twilio/webhook', (req, res) => {
   try {
     const { From, To, CallSid } = req.body;
 
-    // --- CAPTURING THE ROOM NAME ---
-    // Here, we CREATE and therefore "capture" the exact room name.
+    // --- You are now in 100% control of the Room ID ---
     const cleanRoomId = extractRoomId(From); // e.g., "7626818255"
 
-    // This is where you would save the name to a database or send a notification
-    // so your front-end knows which room to join.
-    console.log(`✅ ROOM CAPTURED: Call from ${From} is assigned to room: ${cleanRoomId}`);
+    console.log(`✅ ROOM CAPTURED: Call from ${From} is assigned to predictable room: ${cleanRoomId}`);
     
-    // --- SENDING THE NAME TO LIVEKIT ---
-    // Now we tell LiveKit to use this exact room name.
     const identity = From;
     const livekitTrunkNumber = config.LIVEKIT_SIP_TRUNK_NUMBER; 
     const sipDomain = config.LIVEKIT_SIP_DOMAIN;
 
     const sipUri = `sip:${livekitTrunkNumber}@${sipDomain}?X-LK-RoomName=${encodeURIComponent(cleanRoomId)}&X-LK-Identity=${encodeURIComponent(identity)}`;
 
+    // ✅ THE FIX IS HERE: The ampersand '&' must be escaped as '&' for valid TwiML.
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Dial timeout="25">
@@ -152,7 +145,7 @@ app.use((error: Error, req: express.Request, res: express.Response, next: expres
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 PSTN-LiveKit Server running on port ${PORT}`);
-  console.log(`📞 Twilio webhook URL: http://localhost:${PORT}/api/twilio/webhook`);
+  console.log(`📞 Twilio webhook URL: http://YourRenderURL.onrender.com/api/twilio/webhook`);
   console.log(`🔗 LiveKit WebSocket: ${config.LIVEKIT_WS_URL}`);
   console.log(`🌐 Client URL: ${process.env.CLIENT_URL || 'http://localhost:8080'}`);
 });
