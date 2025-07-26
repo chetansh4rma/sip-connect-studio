@@ -88,38 +88,72 @@ function extractRoomId(phone: string): string {
 }
 
 // This is the final, corrected webhook for the "Header" rule.
+// Enhanced webhook with comprehensive logging
 app.post('/api/twilio/webhook', (req, res) => {
   try {
-    const { From, To, CallSid } = req.body;
+    const { From, To, CallSid, CallStatus, Direction } = req.body;
 
-    // --- You are now in 100% control of the Room ID ---
-    const cleanRoomId = extractRoomId(From); // e.g., "7626818255"
+    // Log all incoming call details
+    console.log('🔥 === INCOMING CALL DETAILS ===');
+    console.log(`📞 Call SID: ${CallSid}`);
+    console.log(`📱 From: ${From}`);
+    console.log(`📱 To: ${To}`);
+    console.log(`📊 Status: ${CallStatus}`);
+    console.log(`🔄 Direction: ${Direction}`);
+    console.log(`⏰ Timestamp: ${new Date().toISOString()}`);
 
-    console.log(`✅ ROOM CAPTURED: Call from ${From} is assigned to predictable room: ${cleanRoomId}`);
+    // Your existing room ID extraction
+    const cleanRoomId = extractRoomId(From);
+    
+    console.log('🏠 === ROOM ASSIGNMENT ===');
+    console.log(`✅ Original Phone: ${From}`);
+    console.log(`🎯 Clean Room ID: ${cleanRoomId}`);
+    console.log(`🔗 Room Format: room_${cleanRoomId}`);
     
     const identity = From;
     const livekitTrunkNumber = config.LIVEKIT_SIP_TRUNK_NUMBER; 
     const sipDomain = config.LIVEKIT_SIP_DOMAIN;
 
-    const sipUri = `sip:${livekitTrunkNumber}@${sipDomain}?X-LK-RoomName=${encodeURIComponent(cleanRoomId)}&X-LK-Identity=${encodeURIComponent(identity)}`;
+    // Enhanced SIP URI construction with logging
+    const roomName = cleanRoomId; // or use `room_${cleanRoomId}` if needed
+    const sipUri = `sip:${livekitTrunkNumber}@${sipDomain}?X-LK-RoomName=${encodeURIComponent(roomName)}&X-LK-Identity=${encodeURIComponent(identity)}`;
 
-    // ✅ THE FIX IS HERE: The ampersand '&' must be escaped as '&' for valid TwiML.
+    console.log('🌐 === SIP ROUTING ===');
+    console.log(`📡 LiveKit Trunk: ${livekitTrunkNumber}`);
+    console.log(`🌍 SIP Domain: ${sipDomain}`);
+    console.log(`🏷️ Room Name Header: ${roomName}`);
+    console.log(`👤 Identity Header: ${identity}`);
+    console.log(`🔗 Full SIP URI: ${sipUri}`);
+
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Dial timeout="25">
-        <Sip>${sipUri.replace(/&/g, '&')}</Sip>
+        <Sip>${sipUri.replace(/&/g, '&amp;')}</Sip>
     </Dial>
 </Response>`;
 
+    console.log('📋 === TWIML RESPONSE ===');
+    console.log(`📝 TwiML Generated: ${twiml.replace(/\n\s*/g, ' ')}`);
+    console.log('🚀 === DISPATCHING TO LIVEKIT ===');
+
     res.status(200).type('text/xml').send(twiml);
 
+    // Log successful response
+    console.log(`✅ Call ${CallSid} successfully routed to LiveKit room: ${roomName}`);
+    console.log('🔥 === END CALL PROCESSING ===\n');
+
   } catch (error) {
-    console.error('❌ Webhook error:', error);
+    console.error('❌ === WEBHOOK ERROR ===');
+    console.error(`💥 Error Details:`, error);
+    console.error(`🆔 Call SID: ${req.body?.CallSid || 'Unknown'}`);
+    console.error(`📱 From: ${req.body?.From || 'Unknown'}`);
+    console.error(`⏰ Timestamp: ${new Date().toISOString()}`);
+    console.error('❌ === END ERROR ===\n');
+
     const errorResponse = `<?xml version="1.0" encoding="UTF-8"?><Response><Say>An application error occurred.</Say></Response>`;
     res.status(500).type('text/xml').send(errorResponse);
   }
 });
-
 // Call status tracking
 app.post('/api/call/status', (req, res) => {
   const { callSid, status, duration, reason } = req.body;
