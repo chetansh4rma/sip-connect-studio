@@ -90,8 +90,9 @@ import { twiml as Twiml } from 'twilio';
 app.post('/api/twilio/webhook', (req, res) => {
   const { From, To, CallSid } = req.body;
 
-  const timestamp = Date.now();
-  const roomId = `call-${timestamp}`;
+  // Strip "+" and country code, use only last 10 digits (Indian number logic)
+  const cleanNumber = From.replace(/^\+91/, ''); // customize this as needed
+  const roomId = cleanNumber;
 
   console.log(`📞 Incoming call from ${From} → Room: ${roomId}`);
   console.log(`🏠 Room ID created: "${roomId}"`);
@@ -99,14 +100,13 @@ app.post('/api/twilio/webhook', (req, res) => {
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">Please wait while we connect your call.</Say>
-  <Pause length="2" />
+  <Say>Please wait while we connect your call.</Say>
+  <Pause length="2"/>
   <Dial timeout="20">
     <Sip>
-      sip:${config.LIVEKIT_SIP_TRUNK_NUMBER}@${config.LIVEKIT_SIP_DOMAIN}?X-LK-CallerId=${encodeURIComponent(From)}&X-LK-RoomName=${encodeURIComponent(roomId)}
+      sip:${process.env.LIVEKIT_SIP_TRUNK_NUMBER}@${process.env.LIVEKIT_SIP_DOMAIN}?X-LK-RoomName=${roomId}&X-LK-CallerId=${encodeURIComponent(From)}
     </Sip>
   </Dial>
-  <Say voice="alice">Sorry, we could not connect your call. Please try again later.</Say>
 </Response>`;
 
   res.set('Content-Type', 'text/xml');
