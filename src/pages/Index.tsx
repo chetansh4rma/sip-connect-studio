@@ -1,10 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { CallInterface } from '@/components/CallInterface';
+import { RoomList } from '@/components/RoomList';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Phone, Globe, Zap, Shield } from 'lucide-react';
 
 const Index = () => {
+  const [selectedRoom, setSelectedRoom] = useState<string>('');
+
+  const handleJoinRoom = (roomName: string) => {
+    setSelectedRoom(roomName);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/20">
       {/* Header */}
@@ -40,8 +47,13 @@ const Index = () => {
         </div>
       </div>
 
-      {/* Main Call Interface */}
-      <CallInterface />
+      <div className="max-w-4xl mx-auto px-6 space-y-6">
+        {/* Main Call Interface */}
+        <CallInterface roomName={selectedRoom} />
+        
+        {/* Available Rooms List */}
+        <RoomList onJoinRoom={handleJoinRoom} />
+      </div>
 
       {/* Architecture Info */}
       <div className="max-w-4xl mx-auto px-6 pb-8">

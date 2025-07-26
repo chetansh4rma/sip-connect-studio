@@ -94,6 +94,8 @@ app.post('/api/twilio/webhook', (req, res) => {
     const identity = From || 'unknown';
 
     console.log(`📞 Incoming call from ${From} -> Clean room ID: ${cleanRoomId}`);
+    console.log(`🏠 Room ID being created: "${cleanRoomId}"`);
+    console.log(`👤 Identity: "${identity}"`);
 
     if (config.LIVEKIT_SIP_TRUNK_NUMBER && config.LIVEKIT_SIP_DOMAIN) {
       const sipUri = `sip:${config.LIVEKIT_SIP_TRUNK_NUMBER}@${config.LIVEKIT_SIP_DOMAIN}?X-LK-RoomName=${encodeURIComponent(cleanRoomId)}&X-LK-Identity=${encodeURIComponent(identity)}`;
