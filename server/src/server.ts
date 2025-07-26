@@ -94,6 +94,8 @@ app.post('/api/twilio/webhook', (req, res) => {
   const roomId = `call-${timestamp}`;
 
   console.log(`📞 Incoming call from ${From} → Room: ${roomId}`);
+  console.log(`🏠 Room ID created: "${roomId}"`);
+  console.log(`📱 Call SID: ${CallSid}`);
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
