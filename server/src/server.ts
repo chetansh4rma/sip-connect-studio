@@ -75,29 +75,14 @@ app.post('/api/token', async (req, res) => {
   }
 });
 
-// SIP configuration endpoint
-app.post('/api/sip/setup', async (req, res) => {
-  try {
-    console.log('Setting up SIP trunk and dispatch rules...');
-    
-    const trunkInfo = await setupSipTrunk(config);
-    const dispatchInfo = await createDispatchRule(config);
-    
-    res.json({
-      success: true,
-      sipTrunk: trunkInfo,
-      dispatchRule: dispatchInfo,
-      message: 'SIP configuration completed successfully'
-    });
-
-  } catch (error) {
-    console.error('Error setting up SIP:', error);
-    res.status(500).json({ 
-      error: 'Failed to setup SIP configuration',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
+// Extract clean room ID from phone number
+function extractRoomId(phone: string): string {
+  let digits = phone.replace(/\D/g, ''); // Remove all non-digits
+  if (digits.length > 10) {
+    digits = digits.slice(-10); // Always return last 10 digits
   }
-});
+  return digits;
+}
 
 import { twiml as Twiml } from 'twilio';
 
@@ -105,37 +90,28 @@ import { twiml as Twiml } from 'twilio';
 app.post('/api/twilio/webhook', (req, res) => {
   try {
     const { From, CallSid } = req.body;
-    const roomId = `support-room`;
+    const cleanRoomId = extractRoomId(From || ''); // Creates clean ID like "7626818255"
+    const identity = From || 'unknown';
 
-    const response = new Twiml.VoiceResponse();
-
-    // Say something while we dial
-    response.say({ voice: 'alice' }, 'Please wait while we connect your call.');
-    response.pause({ length: 3 });
+    console.log(`📞 Incoming call from ${From} -> Clean room ID: ${cleanRoomId}`);
 
     if (config.LIVEKIT_SIP_TRUNK_NUMBER && config.LIVEKIT_SIP_DOMAIN) {
-      const sipUri = `sip:${config.LIVEKIT_SIP_TRUNK_NUMBER}@${config.LIVEKIT_SIP_DOMAIN}?X-LK-CallerId=${encodeURIComponent(
-        From || 'unknown'
-      )}&X-LK-RoomName=${encodeURIComponent(roomId)}`;
-
-      const dial = response.dial({ timeout: 50 });
-      dial.sip(sipUri);
+      const sipUri = `sip:${config.LIVEKIT_SIP_TRUNK_NUMBER}@${config.LIVEKIT_SIP_DOMAIN}?X-LK-RoomName=${encodeURIComponent(cleanRoomId)}&X-LK-Identity=${encodeURIComponent(identity)}`;
+      
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Dial timeout="25"><Sip>${sipUri.replace(/&/g, '&amp;')}</Sip></Dial></Response>`;
+      
+      res.type('text/xml').send(twiml);
     } else {
-      response.say('Sorry, SIP trunk is not configured.');
+      const errorTwiml = '<?xml version="1.0" encoding="UTF-8"?><Response><Say>Sorry, SIP trunk is not configured.</Say></Response>';
+      res.type('text/xml').send(errorTwiml);
     }
 
-    // Fallback
-    response.say({ voice: 'alice' }, 'Sorry, we could not connect your call.');
-
-    const xml = response.toString();
-    res.type('text/xml').send(xml); // ✅ Always send TwiML (XML)
   } catch (err) {
     console.error('❌ Webhook error:', err);
-
+    
     // Send valid fallback TwiML even on error
-    const errorResponse = new Twiml.VoiceResponse();
-    errorResponse.say('An error occurred. Please try again later.');
-    res.status(200).type('text/xml').send(errorResponse.toString());
+    const errorTwiml = '<?xml version="1.0" encoding="UTF-8"?><Response><Say>An error occurred. Please try again later.</Say></Response>';
+    res.status(200).type('text/xml').send(errorTwiml);
   }
 });
 
