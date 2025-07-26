@@ -75,14 +75,7 @@ app.post('/api/token', async (req, res) => {
   }
 });
 
-// Extract clean room ID from phone number
-function extractRoomId(phone: string): string {
-  let digits = phone.replace(/\D/g, ''); // Remove all non-digits
-  if (digits.length > 10) {
-    digits = digits.slice(-10); // Always return last 10 digits
-  }
-  return digits;
-}
+
 
 import { twiml as Twiml } from 'twilio';
 
