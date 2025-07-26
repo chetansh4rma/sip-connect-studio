@@ -67,7 +67,7 @@ export async function createDispatchRule(config: Config): Promise<SipDispatchRul
       // Route to trunk
       trunkIds: ['twilio-pstn-trunk'],
       // Create room based on caller ID or call SID
-      roomName: '${caller_id}-${call_id}',
+      roomName: '${caller_id}',
       roomPreset: 'video_call',
       // Auto-create rooms for incoming calls
       hidePhoneNumber: false,
