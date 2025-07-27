@@ -232,9 +232,10 @@ export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
     try {
       setCallStatus('connecting');
       
-      // Apply same room ID extraction as server for consistency
-      const cleanRoomId = extractRoomId(targetRoomName);
-      console.log(`🌐 Browser joining room: "${targetRoomName}" -> Clean ID: "${cleanRoomId}"`);
+      // For PSTN rooms (starting with room__), use exact name; for manual entry, extract digits
+      const isIncomingPstnCall = targetRoomName.startsWith('room__+');
+      const roomId = isIncomingPstnCall ? targetRoomName : extractRoomId(targetRoomName);
+      console.log(`🌐 Browser joining room: "${targetRoomName}" -> Room ID: "${roomId}" (PSTN: ${isIncomingPstnCall})`);
       
       // Get token from server
       const response = await fetch('https://sip-connect-studio-3.onrender.com/api/token', {
@@ -243,7 +244,7 @@ export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          roomName: cleanRoomId,
+          roomName: roomId,
           identity: `browser-client-${Date.now()}`
         }),
       });
