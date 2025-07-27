@@ -445,7 +445,7 @@ export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
                       <div>
                         <p className="font-medium">Incoming call from +{phoneNumber}</p>
                         <p className="text-xs text-muted-foreground">
-                          {room.participants} participant(s) • {new Date(room.createdAt).toLocaleTimeString()}
+                          {room.participants > 0 ? `${room.participants} active caller(s)` : 'Waiting for caller'} • {new Date(room.createdAt).toLocaleTimeString()}
                         </p>
                       </div>
                     </div>
