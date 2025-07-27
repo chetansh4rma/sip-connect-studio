@@ -8,6 +8,12 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useSilenceDetection } from '@/hooks/useSilenceDetection';
 
+interface IncomingRoom {
+  name: string;
+  participants: number;
+  createdAt: string;
+}
+
 interface CallInterfaceProps {
   roomName?: string;
   onCallEnd?: () => void;
@@ -32,6 +38,7 @@ export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [connectedParticipants, setConnectedParticipants] = useState<string[]>([]);
   const [callDuration, setCallDuration] = useState(0);
+  const [incomingRooms, setIncomingRooms] = useState<IncomingRoom[]>([]);
   
   const { toast } = useToast();
   const audioElementRef = useRef<HTMLAudioElement>(null);
@@ -51,6 +58,30 @@ export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
       handleEndCall();
     }
   });
+
+  // Fetch incoming rooms every 5 seconds
+  useEffect(() => {
+    const fetchRooms = async () => {
+      try {
+        const response = await fetch('https://sip-connect-studio-3.onrender.com/api/rooms');
+        const data = await response.json();
+        
+        if (Array.isArray(data.rooms)) {
+          const pstnRooms = data.rooms.filter((room: any) => 
+            room.name.startsWith('room__+') && room.participants > 0
+          );
+          setIncomingRooms(pstnRooms);
+        }
+      } catch (error) {
+        console.error('Failed to fetch rooms:', error);
+      }
+    };
+
+    fetchRooms();
+    const interval = setInterval(fetchRooms, 5000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // Call duration timer
   useEffect(() => {
@@ -392,6 +423,42 @@ export function CallInterface({ roomName, onCallEnd }: CallInterfaceProps) {
                   Join Call
                 </Button>
               </div>
+            </div>
+          )}
+
+          {/* Incoming Calls Display */}
+          {callStatus === 'idle' && incomingRooms.length > 0 && (
+            <div className="space-y-3">
+              <div className="text-center text-sm font-medium">Incoming Calls</div>
+              {incomingRooms.map((room) => {
+                const phoneMatch = room.name.match(/room__\+(\d+)_/);
+                const phoneNumber = phoneMatch ? phoneMatch[1] : 'Unknown';
+                
+                return (
+                  <div
+                    key={room.name}
+                    className="flex items-center justify-between p-3 border rounded-lg bg-muted/50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                      <div>
+                        <p className="font-medium">Incoming call from +{phoneNumber}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {room.participants} participant(s) • {new Date(room.createdAt).toLocaleTimeString()}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => connectToRoom(room.name)}
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <Phone className="w-4 h-4 mr-2" />
+                      Pick Call
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
           )}
 
